@@ -6,6 +6,7 @@
 #include "Components/SceneComponent.h"
 #include "IndexTypes.h"
 #include "Polygon2.h"
+#include "Voronoi/Voronoi.h"
 #include "ProceduralWorldGenerator.generated.h"
 
 using namespace UE::Math;
@@ -32,8 +33,14 @@ public:
 	UPROPERTY(EditAnywhere)
 	FVector2f MinPosition;
 
+	UPROPERTY(EditAnywhere)
+	float GenerationHeight = 1.0f;
+
 	UPROPERTY(EditAnywhere, Category="Debug")
 	TSubclassOf<AActor> ActorToSpawn;
+
+	UPROPERTY(EditAnywhere, Category = "Debug")
+	TSubclassOf<AActor> VoronoiActor;
 
 protected:
 	// Called when the game starts
@@ -42,9 +49,12 @@ protected:
 	FPolygon2f* Polygon = new FPolygon2f();
 	TArray<TVector2<float>>* Points = new TArray<TVector2<float>>();
 	TArray<FIndex3i>* Triangles;
-	
+
 	void SetRandomVerticesPositions(FPolygon2f& OutPolygon) const;
 	static double GetRandomPos(const float Min, const float Max);
+
+	void VisualizeVoronoi(TArray<FVoronoiCellInfo>& Cells) const;
+
 public:	
 	// Called every frame
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;

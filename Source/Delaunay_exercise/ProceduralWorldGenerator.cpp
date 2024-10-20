@@ -35,13 +35,45 @@ void UProceduralWorldGenerator::BeginPlay()
 	if (Delaunay.Triangulate(*Polygon, Triangles))
 	{
 		UE_LOG(LogTemp, Log, TEXT("Triangulation completed."));
+
+		UE_LOG(LogTemp, Log, TEXT("STEP 3 : Voronoi computation"));
+
+		TArray<FVector> VoronoiVectors;
+		
+		for (int i = 0; i < Polygon->GetVertices().Num(); i++)
+		{
+			FVector NewVec = FVector(Polygon->GetVertices()[i].X, Polygon->GetVertices()[i].Y, 1.0f);
+			VoronoiVectors.Add(NewVec);
+		}
+		
+		const TArrayView<const FVector> VoronoiSites(VoronoiVectors);
+		
+		TVector<double> MinBoxPos = TVector<double>(MinPosition.X, MinPosition.Y, GenerationHeight);
+		TVector<double> MaxBoxPos = TVector<double>(MaxPosition.X, MaxPosition.Y, GenerationHeight);
+		
+		FBox Box = FBox(MinBoxPos, MaxBoxPos);
+
+		FVoronoiDiagram Diagram(VoronoiSites, Box, UE_SMALL_NUMBER);
+		FVoronoiComputeHelper Helper = Diagram.GetComputeHelper();
+		
+		TArray<FVoronoiCellInfo> VoronoiCells;
+		Diagram.ComputeAllCells(VoronoiCells);
 	}
-		// TODO: if result is not well defined, is there anything more robust we could do here?
-		// Perhaps fill based on the winding number of the input mesh? (But more expensive, and we'd have to handle ~coplanar cases as well)
 	else
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Delaunay triangulation has failed!"));
 		return;
+	}
+}
+
+void UProceduralWorldGenerator::VisualizeVoronoi(TArray<FVoronoiCellInfo>& Cells) const
+{
+	for (int i = 0; i < Cells.Num(); i++)
+	{
+		for (int j = 0; j < Cells[i].Vertices.Num(); j++)
+		{
+			GetWorld()->SpawnActor<AActor>(VoronoiActor, Cells[i].Vertices[j], FRotator(0, 0, 0));
+		}
 	}
 }
 
@@ -66,7 +98,7 @@ void UProceduralWorldGenerator::SetRandomVerticesPositions(FPolygon2f& OutPolygo
 	
 		FActorSpawnParameters SpawnParameters;
 		
-		GetWorld()->SpawnActor<AActor>(ActorToSpawn, GetOwner()->GetActorLocation() + FVector(RandomPosX, RandomPosY, 1.0f), FRotator(0, 0, 0));
+		GetWorld()->SpawnActor<AActor>(ActorToSpawn, GetOwner()->GetActorLocation() + FVector(RandomPosX, RandomPosY, GenerationHeight), FRotator(0, 0, 0));
 	}
 
 	OutPolygon.SetVertices(*Points);
