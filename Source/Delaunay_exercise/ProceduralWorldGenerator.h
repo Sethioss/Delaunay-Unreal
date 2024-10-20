@@ -39,9 +39,6 @@ public:
 	UPROPERTY(EditAnywhere, Category="Debug")
 	TSubclassOf<AActor> ActorToSpawn;
 
-	UPROPERTY(EditAnywhere, Category = "Debug")
-	TSubclassOf<AActor> VoronoiActor;
-
 protected:
 	// Called when the game starts
 	virtual void BeginPlay() override;
@@ -53,7 +50,12 @@ protected:
 	void SetRandomVerticesPositions(FPolygon2f& OutPolygon) const;
 	static double GetRandomPos(const float Min, const float Max);
 
-	void VisualizeVoronoi(TArray<FVoronoiCellInfo>& Cells) const;
+	UFUNCTION(BlueprintCallable)
+	void LoadGeneration();
+
+	void VisualizePoints(TArray<TVector2<float>>& Points) const;
+	void VisualizeDelaunay(TArray<FIndex3i>& Tris) const;
+	void VisualizeVoronoi(TArray<TTuple<FVector, FVector>>& Edges) const;
 
 public:	
 	// Called every frame
