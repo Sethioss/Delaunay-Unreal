@@ -39,10 +39,9 @@ protected:
 	// Called when the game starts
 	virtual void BeginPlay() override;
 
-	FPolygon2f* Polygon;
-	TArray<TVector2<float>>* Points;
-	TArray<FIndex3i>* Vertices;
-	TArray<FIndex2i>* Edges;
+	FPolygon2f* Polygon = new FPolygon2f();
+	TArray<TVector2<float>>* Points = new TArray<TVector2<float>>();
+	TArray<FIndex3i>* Triangles;
 	
 	void SetRandomVerticesPositions(FPolygon2f& OutPolygon) const;
 	static double GetRandomPos(const float Min, const float Max);

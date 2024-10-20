@@ -21,20 +21,20 @@ void UProceduralWorldGenerator::BeginPlay()
 {
 	Super::BeginPlay();
 
+	UE_LOG(LogTemp, Log, TEXT("STEP 1 : Randomly setting points in area"));
+
 	FDelaunay2 Delaunay;
+	Delaunay.bValidateEdges = false;
 	Delaunay.bAutomaticallyFixEdgesToDuplicateVertices = true;
+	Points->Reserve(Resolution);
+
+	SetRandomVerticesPositions(*Polygon);
 	
 	UE_LOG(LogTemp, Log, TEXT("STEP 2 : Delaunay triangulation"));
 
-	if (Delaunay.Triangulate(*Polygon, Vertices))
+	if (Delaunay.Triangulate(*Polygon, Triangles))
 	{
 		UE_LOG(LogTemp, Log, TEXT("Triangulation completed."));
-
-		if (Vertices)
-		{
-			TArrayView<const FIndex2i> EdgeView = *Edges;
-			Delaunay.GetFilledTriangles(EdgeView, 0);
-		}
 	}
 		// TODO: if result is not well defined, is there anything more robust we could do here?
 		// Perhaps fill based on the winding number of the input mesh? (But more expensive, and we'd have to handle ~coplanar cases as well)
@@ -54,19 +54,19 @@ void UProceduralWorldGenerator::TickComponent(float DeltaTime, ELevelTick TickTy
 }
 
 void UProceduralWorldGenerator::SetRandomVerticesPositions(FPolygon2f& OutPolygon) const
-{
-	UE_LOG(LogTemp, Log, TEXT("STEP 1 : Randomly setting points in area"));
-	
+{	
 	for(int i = 0; i < Resolution; i++)
 	{
-		Points->Add(TVector2<float>(GetRandomPos(MinPosition.X, MaxPosition.X) + InitialPosition.X,
-				GetRandomPos(MinPosition.Y, MaxPosition.Y) + InitialPosition.Y));
+		double RandomPosX = GetRandomPos(MinPosition.X, MaxPosition.X) + InitialPosition.X;
+		double RandomPosY = GetRandomPos(MinPosition.Y, MaxPosition.Y) + InitialPosition.Y;
 
-		UE_LOG(LogTemp, Log, TEXT("Added point %i at position %f; %f"), i, Verts[i].X, Verts[i].Y);
-
+		Points->Add(TVector2<float>(RandomPosX, RandomPosY));
+	
+		UE_LOG(LogTemp, Log, TEXT("Added point %i at position %f; %f"), i, RandomPosX, RandomPosY);
+	
 		FActorSpawnParameters SpawnParameters;
 		
-		GetWorld()->SpawnActor<AActor>(ActorToSpawn, GetOwner()->GetActorLocation() + FVector(Verts[i].X, Verts[i].Y, 0.0f), FRotator(0, 0, 0));
+		GetWorld()->SpawnActor<AActor>(ActorToSpawn, GetOwner()->GetActorLocation() + FVector(RandomPosX, RandomPosY, 1.0f), FRotator(0, 0, 0));
 	}
 
 	OutPolygon.SetVertices(*Points);
