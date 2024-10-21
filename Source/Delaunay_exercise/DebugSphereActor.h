@@ -15,6 +15,9 @@ public:
 	// Sets default values for this actor's properties
 	ADebugSphereActor();
 
+	UPROPERTY(EditAnywhere)
+	class UStaticMeshComponent* Mesh;
+
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;

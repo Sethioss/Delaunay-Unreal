@@ -3,6 +3,8 @@
 
 #include "ProceduralWorldGenerator.h"
 #include "CompGeom/Delaunay2.h"
+#include "Kismet/GameplayStatics.h"
+#include "DebugSphereActor.h"
 #include "Components/StaticMeshComponent.h"
 
 // Sets default values for this component's properties
@@ -21,7 +23,19 @@ void UProceduralWorldGenerator::BeginPlay()
 {
 	Super::BeginPlay();
 
+	bVisualize = true;
 	LoadGeneration();
+}
+
+void UProceduralWorldGenerator::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	TArray<AActor*> FoundActors;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ADebugSphereActor::StaticClass(), FoundActors);
+
+	for (int i = 0; i < FoundActors.Num(); i++)
+	{
+		GetWorld()->DestroyActor(FoundActors[i]);
+	}
 }
 
 void UProceduralWorldGenerator::VisualizePoints(TArray<TVector2<float>>& PointsList) const
@@ -29,7 +43,8 @@ void UProceduralWorldGenerator::VisualizePoints(TArray<TVector2<float>>& PointsL
 	for (int i = 0; i < PointsList.Num(); i++)
 	{
 		FActorSpawnParameters SpawnParameters;
-		GetWorld()->SpawnActor<AActor>(ActorToSpawn, GetOwner()->GetActorLocation() + FVector(PointsList[i].X, PointsList[i].Y, GenerationHeight), FRotator(0, 0, 0));
+
+		GetWorld()->SpawnActor<ADebugSphereActor>(ActorToSpawn, GetOwner()->GetActorLocation() + FVector(PointsList[i].X, PointsList[i].Y, GenerationHeight), FRotator(0, 0, 0));
 	}
 }
 
@@ -54,6 +69,16 @@ void UProceduralWorldGenerator::VisualizeVoronoi(TArray<TTuple<FVector, FVector>
 		DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + Edges[i].Key, GetOwner()->GetActorLocation() + Edges[i].Value, FColor::Purple, true, -1.0f, (uint8)0U, 10.0f);
 	}
 }
+
+#if WITH_EDITOR
+void UProceduralWorldGenerator::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	if (bVisualize)
+	{
+		LoadGeneration();
+	}
+}
+#endif
 
 // Called every frame
 void UProceduralWorldGenerator::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -83,6 +108,16 @@ double UProceduralWorldGenerator::GetRandomPos(const float Min, const float Max)
 
 void UProceduralWorldGenerator::LoadGeneration()
 {
+	TArray<AActor*> FoundActors;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ADebugSphereActor::StaticClass(), FoundActors);
+
+	for (int i = 0; i < FoundActors.Num(); i++)
+	{
+		GetWorld()->DestroyActor(FoundActors[i]);
+	}
+
+	FlushPersistentDebugLines(GetWorld());
+
 	if (Points != nullptr)
 	{
 		Points->Empty();
@@ -100,14 +135,20 @@ void UProceduralWorldGenerator::LoadGeneration()
 	Points->Reserve(Resolution);
 
 	SetRandomVerticesPositions(*Polygon);
-	VisualizePoints(*Points);
+	if (bVisualizePoints)
+	{
+		VisualizePoints(*Points);
+	}
 
 	UE_LOG(LogTemp, Log, TEXT("STEP 2 : Delaunay triangulation"));
 
 	if (Delaunay.Triangulate(*Polygon, Triangles))
 	{
 		TArray<FIndex3i> Tris = Delaunay.GetTriangles();
-		VisualizeDelaunay(Tris);
+		if (bVisualizeDelaunay)
+		{
+			VisualizeDelaunay(Tris);
+		}
 
 		UE_LOG(LogTemp, Log, TEXT("Triangulation completed."));
 		UE_LOG(LogTemp, Log, TEXT("STEP 3 : Voronoi computation"));
@@ -130,17 +171,15 @@ void UProceduralWorldGenerator::LoadGeneration()
 		FVoronoiDiagram Diagram(VoronoiSites, Box, .1f);
 		FVoronoiComputeHelper Helper = Diagram.GetComputeHelper();
 
-		TArray<FVoronoiCellInfo> VoronoiCells;
-		Diagram.ComputeAllCells(VoronoiCells);
-
 		TArray<TTuple<FVector, FVector>> Edges;
 		TArray<int32> CellMember;
-		for (int i = 0; i < VoronoiCells.Num(); i++)
-		{
-			Diagram.ComputeCellEdges(Edges, CellMember);
-		}
 
-		VisualizeVoronoi(Edges);
+		Diagram.ComputeCellEdges(Edges, CellMember);
+
+		if(bVisualizeVoronoi)
+		{
+			VisualizeVoronoi(Edges);
+		}
 
 		UE_LOG(LogTemp, Log, TEXT("Voronoi computation completed"));
 	}
