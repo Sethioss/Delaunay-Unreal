@@ -1,10 +1,9 @@
 // Fill out your copyright notice in the Description page of Project Settings.
-
-
 #include "ProceduralWorldGenerator.h"
 #include "CompGeom/Delaunay2.h"
 #include "Kismet/GameplayStatics.h"
 #include "DebugSphereActor.h"
+#include "Voronoi/Voronoi.h"
 #include "Components/StaticMeshComponent.h"
 
 // Sets default values for this component's properties
@@ -38,7 +37,91 @@ void UProceduralWorldGenerator::EndPlay(const EEndPlayReason::Type EndPlayReason
 	}
 }
 
-void UProceduralWorldGenerator::VisualizePoints(TArray<TVector2<float>>& PointsList) const
+void UProceduralWorldGenerator::LoadGeneration()
+{
+	TArray<AActor*> FoundActors;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ADebugSphereActor::StaticClass(), FoundActors);
+
+	for (int i = 0; i < FoundActors.Num(); i++)
+	{
+		GetWorld()->DestroyActor(FoundActors[i]);
+	}
+
+#if WITH_ENGINE || UE_BUILD_DEBUG
+	FlushPersistentDebugLines(GetWorld());
+#endif
+
+	Points.Reset();
+
+	UE_LOG(LogTemp, Log, TEXT("STEP 1 : Randomly setting points in area"));
+
+	FDelaunay2 Delaunay;
+	Delaunay.bValidateEdges = false;
+	Delaunay.bAutomaticallyFixEdgesToDuplicateVertices = true;
+	
+	Points.Reserve(Resolution);
+	
+	SetRandomVerticesPositions(Points);
+	if (bVisualizePoints)
+	{
+		VisualizePoints(Points);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("STEP 2 : Delaunay triangulation"));
+
+	if (Delaunay.Triangulate(Points))
+	{
+		TArray<FIndex3i> Tris = Delaunay.GetTriangles();
+		if (bVisualizeDelaunay)
+		{
+			VisualizeDelaunay(Tris);
+		}
+
+		UE_LOG(LogTemp, Log, TEXT("Triangulation completed."));
+		UE_LOG(LogTemp, Log, TEXT("STEP 3 : Voronoi calculation"));
+
+		TArray<FVector2d> Points2d;
+		Points2d.Reserve(Points.Num());
+
+		for(int i = 0; i < Points.Num(); i++)
+		{
+			FVector2d* FinalPoint = new FVector2d(Points[i].X, Points[i].Y);
+			Points2d.Add(*FinalPoint);
+		}
+		
+		TArray<TArray<FVector2d>> VoronoiEdges = Delaunay.GetVoronoiCells(Points2d, false, FAxisAlignedBox2d(FVector2d(MinPosition.X, MinPosition.Y), FVector2d(MaxPosition.X, MaxPosition.Y)));
+		if (bVisualizeVoronoi)
+		{
+			VisualizeVoronoi(VoronoiEdges);
+		}
+
+		UE_LOG(LogTemp, Log, TEXT("Voronoi computation completed"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Delaunay triangulation has failed!"));
+		return;
+	}
+}
+
+void UProceduralWorldGenerator::SetRandomVerticesPositions(TArray<FVector2d>& OutVertices) const
+{	
+	for(int i = 0; i < Resolution; i++)
+	{
+		double RandomPosX = GetRandomPos(MinPosition.X, MaxPosition.X) + InitialPosition.X;
+		double RandomPosY = GetRandomPos(MinPosition.Y, MaxPosition.Y) + InitialPosition.Y;
+
+		FVector2d Vertex = FVector2d(RandomPosX, RandomPosY);
+		OutVertices.Add(Vertex);
+	}
+}
+
+double UProceduralWorldGenerator::GetRandomPos(const float Min, const float Max)
+{
+	return FMath::RandRange(Min, Max);
+}
+
+void UProceduralWorldGenerator::VisualizePoints(TArray<FVector2d>& PointsList) const
 {
 	for (int i = 0; i < PointsList.Num(); i++)
 	{
@@ -52,22 +135,33 @@ void UProceduralWorldGenerator::VisualizeDelaunay(TArray<FIndex3i>& Tris) const
 {
 	for (int i = 0; i < Tris.Num(); i++)
 	{
-		FVector2f EdgeA = Polygon->GetVertices()[Tris[i].A];
-		FVector2f EdgeB = Polygon->GetVertices()[Tris[i].B];
-		FVector2f EdgeC = Polygon->GetVertices()[Tris[i].C];
-
-		DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + FVector(EdgeA.X, EdgeA.Y, GenerationHeight), GetOwner()->GetActorLocation() + FVector(EdgeB.X, EdgeB.Y, GenerationHeight), FColor::Blue, true, -1.0f, (uint8)0U, 5.0f);
-		DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + FVector(EdgeB.X, EdgeB.Y, GenerationHeight), GetOwner()->GetActorLocation() + FVector(EdgeC.X, EdgeC.Y, GenerationHeight), FColor::Blue, true, -1.0f, (uint8)0U, 5.0f);
-		DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + FVector(EdgeC.X, EdgeC.Y, GenerationHeight), GetOwner()->GetActorLocation() + FVector(EdgeA.X, EdgeA.Y, GenerationHeight), FColor::Blue, true, -1.0f, (uint8)0U, 5.0f);
+		FVector VertexA = FVector(Points[Tris[i].A].X, Points[Tris[i].A].Y, GenerationHeight);
+		FVector VertexB = FVector(Points[Tris[i].B].X, Points[Tris[i].B].Y, GenerationHeight);
+		FVector VertexC = FVector(Points[Tris[i].C].X, Points[Tris[i].C].Y, GenerationHeight);
+		DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + VertexA, GetOwner()->GetActorLocation() + VertexB, FColor::Blue, true, -1.0f, (uint8)0U, 5.0f);
+		DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + VertexB, GetOwner()->GetActorLocation() + VertexC, FColor::Blue, true, -1.0f, (uint8)0U, 5.0f);
+		DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + VertexC, GetOwner()->GetActorLocation() + VertexA, FColor::Blue, true, -1.0f, (uint8)0U, 5.0f);
 	}
+	
+	UE_LOG(LogTemp, Warning, TEXT("Delaunay algorithm has created a polygon with %i triangles"), Tris.Num());
 }
 
-void UProceduralWorldGenerator::VisualizeVoronoi(TArray<TTuple<FVector, FVector>>& Edges) const
+void UProceduralWorldGenerator::VisualizeVoronoi(TArray<TArray<FVector2d>>& Cells) const
 {
-	for (int i = 0; i < Edges.Num(); i++)
+	for (int i = 0; i < Cells.Num(); i++)
 	{
-		DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + Edges[i].Key, GetOwner()->GetActorLocation() + Edges[i].Value, FColor::Purple, true, -1.0f, (uint8)0U, 10.0f);
+		for(int j = 0; j < Cells[i].Num(); j++)
+		{
+			FVector3d PointA(Cells[i][j].X, Cells[i][j].Y, GenerationHeight);
+			int IncrementIndexToShow = (j+1)%Cells[i].Num();
+			FVector3d PointB(Cells[i][IncrementIndexToShow].X, Cells[i][IncrementIndexToShow].Y, GenerationHeight);
+
+			DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + PointA, GetOwner()->GetActorLocation() + PointB, FColor::Purple, true, -1.0f, (uint8)0U, 10.0f);
+		}
 	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Voronoi algorithm created %i cells"), Cells.Num());
+
 }
 
 #if WITH_EDITOR
@@ -79,114 +173,4 @@ void UProceduralWorldGenerator::PostEditChangeProperty(FPropertyChangedEvent& Pr
 	}
 }
 #endif
-
-// Called every frame
-void UProceduralWorldGenerator::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
-{
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-
-	// ...
-}
-
-void UProceduralWorldGenerator::SetRandomVerticesPositions(FPolygon2f& OutPolygon) const
-{	
-	for(int i = 0; i < Resolution; i++)
-	{
-		double RandomPosX = GetRandomPos(MinPosition.X, MaxPosition.X) + InitialPosition.X;
-		double RandomPosY = GetRandomPos(MinPosition.Y, MaxPosition.Y) + InitialPosition.Y;
-
-		Points->Add(TVector2<float>(RandomPosX, RandomPosY));
-	}
-
-	OutPolygon.SetVertices(*Points);
-}
-
-double UProceduralWorldGenerator::GetRandomPos(const float Min, const float Max)
-{
-	return FMath::RandRange(Min, Max);
-}
-
-void UProceduralWorldGenerator::LoadGeneration()
-{
-	TArray<AActor*> FoundActors;
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ADebugSphereActor::StaticClass(), FoundActors);
-
-	for (int i = 0; i < FoundActors.Num(); i++)
-	{
-		GetWorld()->DestroyActor(FoundActors[i]);
-	}
-
-	FlushPersistentDebugLines(GetWorld());
-
-	if (Points != nullptr)
-	{
-		Points->Empty();
-	}
-	if (Triangles != nullptr)
-	{
-		Triangles->Empty();
-	}
-
-	UE_LOG(LogTemp, Log, TEXT("STEP 1 : Randomly setting points in area"));
-
-	FDelaunay2 Delaunay;
-	Delaunay.bValidateEdges = false;
-	Delaunay.bAutomaticallyFixEdgesToDuplicateVertices = true;
-	Points->Reserve(Resolution);
-
-	SetRandomVerticesPositions(*Polygon);
-	if (bVisualizePoints)
-	{
-		VisualizePoints(*Points);
-	}
-
-	UE_LOG(LogTemp, Log, TEXT("STEP 2 : Delaunay triangulation"));
-
-	if (Delaunay.Triangulate(*Polygon, Triangles))
-	{
-		TArray<FIndex3i> Tris = Delaunay.GetTriangles();
-		if (bVisualizeDelaunay)
-		{
-			VisualizeDelaunay(Tris);
-		}
-
-		UE_LOG(LogTemp, Log, TEXT("Triangulation completed."));
-		UE_LOG(LogTemp, Log, TEXT("STEP 3 : Voronoi computation"));
-
-		TArray<FVector> VoronoiVectors;
-
-		for (int i = 0; i < Polygon->GetVertices().Num(); i++)
-		{
-			FVector NewVec = FVector(Polygon->GetVertices()[i].X, Polygon->GetVertices()[i].Y, GenerationHeight);
-			VoronoiVectors.Add(NewVec);
-		}
-
-		const TArrayView<const FVector> VoronoiSites(VoronoiVectors);
-
-		TVector<double> MinBoxPos = TVector<double>(MinPosition.X, MinPosition.Y, GenerationHeight);
-		TVector<double> MaxBoxPos = TVector<double>(MaxPosition.X, MaxPosition.Y, GenerationHeight);
-
-		FBox Box = FBox(MinBoxPos, MaxBoxPos);
-
-		FVoronoiDiagram Diagram(VoronoiSites, Box, .1f);
-		FVoronoiComputeHelper Helper = Diagram.GetComputeHelper();
-
-		TArray<TTuple<FVector, FVector>> Edges;
-		TArray<int32> CellMember;
-
-		Diagram.ComputeCellEdges(Edges, CellMember);
-
-		if(bVisualizeVoronoi)
-		{
-			VisualizeVoronoi(Edges);
-		}
-
-		UE_LOG(LogTemp, Log, TEXT("Voronoi computation completed"));
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Delaunay triangulation has failed!"));
-		return;
-	}
-}
 
