@@ -46,6 +46,12 @@ void UProceduralWorldGenerator::LoadGeneration()
 		GetWorld()->DestroyActor(FoundActors[i]);
 	}
 
+	for(int i = 0; i < SpawnedActors.Num(); i++)
+	{
+		GetWorld()->DestroyActor(SpawnedActors[i]);
+	}
+	SpawnedActors.Reset();
+
 #if WITH_ENGINE || UE_BUILD_DEBUG
 	FlushPersistentDebugLines(GetWorld());
 #endif
@@ -97,11 +103,16 @@ void UProceduralWorldGenerator::LoadGeneration()
 		UE_LOG(LogTemp, Log, TEXT("Voronoi computation completed"));
 
 		PrimReadyList Nodes = MakePrimNodes(VoronoiEdges);
-		TArray<FMSTNode> MSTNodes = PrimAlgorithm(Nodes);
+		TArray<MSTNode> FinalMSTNodes = PrimAlgorithm(Nodes);
 
 		if (bVisualizePrim)
 		{
-			VisualizePrim(MSTNodes);
+			VisualizePrim(FinalMSTNodes);
+		}
+
+		if(bShowLevel)
+		{
+			GenerateLevel(FinalMSTNodes);
 		}
 	}
 	else
@@ -134,7 +145,7 @@ void UProceduralWorldGenerator::VisualizePoints(TArray<FVector2d>& PointsList) c
 	{
 		FActorSpawnParameters SpawnParameters;
 
-		GetWorld()->SpawnActor<ADebugSphereActor>(ActorToSpawn, GetOwner()->GetActorLocation() + FVector(PointsList[i].X, PointsList[i].Y, GenerationHeight), FRotator(0, 0, 0));
+		GetWorld()->SpawnActor<ADebugSphereActor>(PointVisualisationActor, GetOwner()->GetActorLocation() + FVector(PointsList[i].X, PointsList[i].Y, 0.0f), FRotator(0, 0, 0));
 	}
 }
 
@@ -142,9 +153,9 @@ void UProceduralWorldGenerator::VisualizeDelaunay(TArray<FIndex3i>& Tris) const
 {
 	for (int i = 0; i < Tris.Num(); i++)
 	{
-		FVector VertexA = FVector(Points[Tris[i].A].X, Points[Tris[i].A].Y, GenerationHeight);
-		FVector VertexB = FVector(Points[Tris[i].B].X, Points[Tris[i].B].Y, GenerationHeight);
-		FVector VertexC = FVector(Points[Tris[i].C].X, Points[Tris[i].C].Y, GenerationHeight);
+		FVector VertexA = FVector(Points[Tris[i].A].X, Points[Tris[i].A].Y, 0.0f);
+		FVector VertexB = FVector(Points[Tris[i].B].X, Points[Tris[i].B].Y, 0.0f);
+		FVector VertexC = FVector(Points[Tris[i].C].X, Points[Tris[i].C].Y, 0.0f);
 		DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + VertexA, GetOwner()->GetActorLocation() + VertexB, FColor::Blue, true, -1.0f, (uint8)0U, 5.0f);
 		DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + VertexB, GetOwner()->GetActorLocation() + VertexC, FColor::Blue, true, -1.0f, (uint8)0U, 5.0f);
 		DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + VertexC, GetOwner()->GetActorLocation() + VertexA, FColor::Blue, true, -1.0f, (uint8)0U, 5.0f);
@@ -159,9 +170,9 @@ void UProceduralWorldGenerator::VisualizeVoronoi(TArray<TArray<FVector2d>>& Cell
 	{
 		for(int j = 0; j < Cells[i].Num(); j++)
 		{
-			FVector3d PointA(Cells[i][j].X, Cells[i][j].Y, GenerationHeight);
+			FVector3d PointA(Cells[i][j].X, Cells[i][j].Y, 0.0f);
 			int IncrementIndexToShow = (j+1)%Cells[i].Num();
-			FVector3d PointB(Cells[i][IncrementIndexToShow].X, Cells[i][IncrementIndexToShow].Y, GenerationHeight);
+			FVector3d PointB(Cells[i][IncrementIndexToShow].X, Cells[i][IncrementIndexToShow].Y, 0.0f);
 
 			DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + PointA, GetOwner()->GetActorLocation() + PointB, FColor::Purple, true, -1.0f, (uint8)0U, 10.0f);
 		}
@@ -171,12 +182,12 @@ void UProceduralWorldGenerator::VisualizeVoronoi(TArray<TArray<FVector2d>>& Cell
 
 }
 
-void UProceduralWorldGenerator::VisualizePrim(TArray<FMSTNode>& Nodes) const
+void UProceduralWorldGenerator::VisualizePrim(TArray<MSTNode>& Nodes) const
 {
 	for (int i = 0; i < Nodes.Num(); i++)
 	{
-		FVector3d PointA(Nodes[i].Key.X, Nodes[i].Key.Y, GenerationHeight);
-		FVector3d PointB(Nodes[i].Value.X, Nodes[i].Value.Y, GenerationHeight);
+		FVector3d PointA(Nodes[i].Key.X, Nodes[i].Key.Y, 0.0f);
+		FVector3d PointB(Nodes[i].Value.X, Nodes[i].Value.Y, 0.0f);
 		
 		DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + PointA, GetOwner()->GetActorLocation() + PointB, FColor::Black, true, -1.0f, 0U, 10.0f);
 	}
@@ -203,11 +214,11 @@ PrimReadyList UProceduralWorldGenerator::MakePrimNodes(const TArray<TArray<FVect
 	return PrimMap;
 }
 
-TArray<FMSTNode> UProceduralWorldGenerator::PrimAlgorithm(const PrimReadyList& PrimList)
+TArray<MSTNode> UProceduralWorldGenerator::PrimAlgorithm(const PrimReadyList& PrimList)
 {
 	TSet<FVector2d> Visited;
 	TArray<TPair<float, TPair<FVector2d, FVector2d>>> MinHeap;
-	TArray<FMSTNode> NodesToReturn;
+	TArray<MSTNode> NodesToReturn;
 
 	auto StartPointIter = PrimList.CreateConstIterator();
     
@@ -254,11 +265,10 @@ void UProceduralWorldGenerator::AddEdgesToHeap(const FVector2d& Point, const TMa
 			}
 		}
 	}
-
-	// Trier le heap par poids croissant
+	
 	MinHeap.Sort([](const TPair<float, TPair<FVector2d, FVector2d>>& A, const TPair<float, TPair<FVector2d, FVector2d>>& B)
 	{
-		return A.Key < B.Key;  // Comparer par poids (distance)
+		return A.Key < B.Key;
 	});
 }
 
@@ -267,6 +277,84 @@ float UProceduralWorldGenerator::GetDistance(const FVector2d& Point1, const FVec
 	return FVector2d::Distance(Point1, Point2);
 }
 
+void UProceduralWorldGenerator::GenerateLevel(MST& MST)
+{
+	for(int i = 0; i < MST.Num(); i++)
+	{
+		FVector VertexPos = FVector(MST[i].Key.X, MST[i].Key.Y, 0.0f);
+		GetWorld()->SpawnActor<ADebugSphereActor>(LevelPointMesh, GetOwner()->GetActorLocation() + VertexPos, FRotator(0, 0, 0));
+	}
+	
+	GeneratePathFromMST(MST, GetWorld());
+}
+
+void UProceduralWorldGenerator::GeneratePathFromMST(const TArray<MSTNode>& Edges, UWorld* World)
+{
+    if (!World) return;
+
+    // Parameters for path generation
+    const float HalfCube = CubeSize * 0.5f;
+    const int32 NumCubesWidth = FMath::Max(1, FMath::RoundToInt(PathWidth / CubeSize));
+    
+    for (const auto& Edge : Edges)
+    {
+        // Convert 2D points to 3D (assuming we're working on XY plane with constant Z)
+        FVector Start(GetOwner()->GetActorLocation().X + Edge.Key.X, GetOwner()->GetActorLocation().Y + Edge.Key.Y, 0.0f);
+        FVector End(GetOwner()->GetActorLocation().X + Edge.Value.X, GetOwner()->GetActorLocation().Y + Edge.Value.Y, 0.0f);
+        
+        // Calculate direction and length
+        FVector Direction = (End - Start);
+        float Length = Direction.Size();
+        Direction.Normalize();
+        
+        // Calculate perpendicular vector for path width
+        FVector Perpendicular(-Direction.Y, Direction.X, 0.0f);
+        
+        // Calculate number of cubes needed for length
+        int32 NumCubesLength = FMath::Max(1, FMath::RoundToInt(Length / CubeSize));
+        
+        // Generate grid of cubes
+        for (int32 LengthIndex = 0; LengthIndex < NumCubesLength; LengthIndex++)
+        {
+            float LengthOffset = LengthIndex * CubeSize;
+            
+            for (int32 WidthIndex = 0; WidthIndex < NumCubesWidth; WidthIndex++)
+            {
+                // Calculate offset from center of path
+                float WidthOffset = (WidthIndex - (NumCubesWidth - 1) * 0.5f) * CubeSize;
+                
+                // Calculate cube position
+                FVector CubePos = Start + Direction * LengthOffset + Perpendicular * WidthOffset;
+                
+                // Spawn cube
+                SpawnPathCube(CubePos, CubeSize, World);
+            }
+        }
+    }
+}
+
+void UProceduralWorldGenerator::SpawnPathCube(const FVector& Location, float Size, UWorld* World)
+{
+    AActor* Cube = World->SpawnActor<AActor>();
+    if (!Cube) return;
+
+	SpawnedActors.Add(Cube);
+	
+    UStaticMeshComponent* MeshComp = NewObject<UStaticMeshComponent>(Cube);
+    MeshComp->RegisterComponent();
+    Cube->SetRootComponent(MeshComp);
+	
+    if (UStaticMesh* CubeMesh = LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube")))
+    {
+        MeshComp->SetStaticMesh(CubeMesh);
+    	
+        Cube->SetActorScale3D(FVector(Size / 100.0f));
+        Cube->SetActorLocation(Location);
+    	
+        MeshComp->SetMobility(EComponentMobility::Static);
+        MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+    }
+}
 
 #if WITH_EDITOR
 void UProceduralWorldGenerator::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)

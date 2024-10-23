@@ -11,7 +11,8 @@
 using namespace UE::Math;
 using namespace UE::Geometry;
 using PrimReadyList = TMap<FVector2d, TArray<FVector2d>>;
-using FMSTNode = TPair<FVector2d, FVector2d>;
+using MSTNode = TPair<FVector2d, FVector2d>;
+using MST = TArray<MSTNode>;
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class DELAUNAY_EXERCISE_API UProceduralWorldGenerator : public USceneComponent
@@ -35,6 +36,12 @@ public:
 	FVector2f MinPosition;
 
 	UPROPERTY(EditAnywhere)
+	float CubeSize = 40.0f;
+
+	UPROPERTY(EditAnywhere)
+	float PathWidth = 150.0f;
+
+	UPROPERTY(EditAnywhere)
 	bool bVisualizePoints = false;
 
 	UPROPERTY(EditAnywhere)
@@ -45,12 +52,15 @@ public:
 
 	UPROPERTY(EditAnywhere)
 	bool bVisualizePrim = false;
-	
+
 	UPROPERTY(EditAnywhere)
-	float GenerationHeight = 1.0f;
+	bool bShowLevel = false;
 
 	UPROPERTY(EditAnywhere, Category="Debug")
-	TSubclassOf<class ADebugSphereActor> ActorToSpawn;
+	TSubclassOf<class ADebugSphereActor> LevelPointMesh;
+	
+	UPROPERTY(EditAnywhere, Category="Debug")
+	TSubclassOf<class ADebugSphereActor> PointVisualisationActor;
 
 	bool bVisualize = false;
 
@@ -59,6 +69,7 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	
 	TArray<FVector2d> Points;
+	TArray<AActor*> SpawnedActors;
 
 	void SetRandomVerticesPositions(TArray<FVector2d>& OutVertices) const;
 	static double GetRandomPos(const float Min, const float Max);
@@ -69,13 +80,21 @@ protected:
 	void VisualizePoints(TArray<FVector2d>& PointsList) const;
 	void VisualizeDelaunay(TArray<FIndex3i>& Tris) const;
 	void VisualizeVoronoi(TArray<TArray<FVector2d>>& Cells) const;
-	void VisualizePrim(TArray<FMSTNode>& Nodes) const;
+	void VisualizePrim(TArray<MSTNode>& Nodes) const;
 
 	PrimReadyList MakePrimNodes(const TArray<TArray<FVector2d>>& VoronoiPoints) const;
-    TArray<FMSTNode> PrimAlgorithm(const PrimReadyList& PrimList);
+    TArray<MSTNode> PrimAlgorithm(const PrimReadyList& PrimList);
 	void AddEdgesToHeap(const FVector2d& Point, const TMap<FVector2d, TArray<FVector2d>>& Graph, TArray<TPair<float, TPair<FVector2d, FVector2d>>>& MinHeap, const TSet<FVector2d>& Visited);
 
 	float GetDistance(const FVector2d& Point1, const FVector2d& Point2);
+
+	void GenerateLevel(MST& MST);
+	
+	void GeneratePathFromMST(const TArray<MSTNode>& Edges, UWorld* World);
+
+	void SpawnPathCube(const FVector& Location, float Size, UWorld* World);
+	
+
 	
 
 #if WITH_EDITOR
