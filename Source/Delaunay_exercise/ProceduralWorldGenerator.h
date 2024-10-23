@@ -5,23 +5,13 @@
 #include "CoreMinimal.h"
 #include "Components/SceneComponent.h"
 #include "IndexTypes.h"
+#include "Templates/Tuple.h"
 #include "ProceduralWorldGenerator.generated.h"
-
-USTRUCT()
-struct FMSTNode
-{
-	GENERATED_BODY()
-
-	FVector2d BeginPoint;
-	FVector2d EndPoint;
-
-	FMSTNode();
-	FMSTNode(const FVector2d& A, const FVector2d& B);
-};
 
 using namespace UE::Math;
 using namespace UE::Geometry;
 using PrimReadyList = TMap<FVector2d, TArray<FVector2d>>;
+using FMSTNode = TPair<FVector2d, FVector2d>;
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class DELAUNAY_EXERCISE_API UProceduralWorldGenerator : public USceneComponent
@@ -54,6 +44,9 @@ public:
 	bool bVisualizeVoronoi = false;
 
 	UPROPERTY(EditAnywhere)
+	bool bVisualizePrim = false;
+	
+	UPROPERTY(EditAnywhere)
 	float GenerationHeight = 1.0f;
 
 	UPROPERTY(EditAnywhere, Category="Debug")
@@ -76,9 +69,13 @@ protected:
 	void VisualizePoints(TArray<FVector2d>& PointsList) const;
 	void VisualizeDelaunay(TArray<FIndex3i>& Tris) const;
 	void VisualizeVoronoi(TArray<TArray<FVector2d>>& Cells) const;
+	void VisualizePrim(TArray<FMSTNode>& Nodes) const;
 
 	PrimReadyList MakePrimNodes(const TArray<TArray<FVector2d>>& VoronoiPoints) const;
+    TArray<FMSTNode> PrimAlgorithm(const PrimReadyList& PrimList);
+	void AddEdgesToHeap(const FVector2d& Point, const TMap<FVector2d, TArray<FVector2d>>& Graph, TArray<TPair<float, TPair<FVector2d, FVector2d>>>& MinHeap, const TSet<FVector2d>& Visited);
 
+	float GetDistance(const FVector2d& Point1, const FVector2d& Point2);
 	
 
 #if WITH_EDITOR

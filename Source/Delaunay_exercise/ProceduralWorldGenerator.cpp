@@ -5,16 +5,6 @@
 #include "DebugSphereActor.h"
 #include "Components/StaticMeshComponent.h"
 
-FMSTNode::FMSTNode()
-{
-}
-
-FMSTNode::FMSTNode(const FVector2d& A, const FVector2d& B)
-{
-	BeginPoint = A;
-	EndPoint = B;
-}
-
 // Sets default values for this component's properties
 UProceduralWorldGenerator::UProceduralWorldGenerator()
 {
@@ -107,6 +97,12 @@ void UProceduralWorldGenerator::LoadGeneration()
 		UE_LOG(LogTemp, Log, TEXT("Voronoi computation completed"));
 
 		PrimReadyList Nodes = MakePrimNodes(VoronoiEdges);
+		TArray<FMSTNode> MSTNodes = PrimAlgorithm(Nodes);
+
+		if (bVisualizePrim)
+		{
+			VisualizePrim(MSTNodes);
+		}
 	}
 	else
 	{
@@ -175,6 +171,17 @@ void UProceduralWorldGenerator::VisualizeVoronoi(TArray<TArray<FVector2d>>& Cell
 
 }
 
+void UProceduralWorldGenerator::VisualizePrim(TArray<FMSTNode>& Nodes) const
+{
+	for (int i = 0; i < Nodes.Num(); i++)
+	{
+		FVector3d PointA(Nodes[i].Key.X, Nodes[i].Key.Y, GenerationHeight);
+		FVector3d PointB(Nodes[i].Value.X, Nodes[i].Value.Y, GenerationHeight);
+		
+		DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + PointA, GetOwner()->GetActorLocation() + PointB, FColor::Black, true, -1.0f, 0U, 10.0f);
+	}
+}
+
 PrimReadyList UProceduralWorldGenerator::MakePrimNodes(const TArray<TArray<FVector2d>>& VoronoiPoints) const
 {
 	PrimReadyList PrimMap;
@@ -196,6 +203,69 @@ PrimReadyList UProceduralWorldGenerator::MakePrimNodes(const TArray<TArray<FVect
 	return PrimMap;
 }
 
+TArray<FMSTNode> UProceduralWorldGenerator::PrimAlgorithm(const PrimReadyList& PrimList)
+{
+	TSet<FVector2d> Visited;
+	TArray<TPair<float, TPair<FVector2d, FVector2d>>> MinHeap;
+	TArray<FMSTNode> NodesToReturn;
+
+	auto StartPointIter = PrimList.CreateConstIterator();
+    
+	FVector2d StartPoint = StartPointIter.Key();
+	Visited.Add(StartPoint);
+	
+	AddEdgesToHeap(StartPoint, PrimList, MinHeap, Visited);
+	
+	while (MinHeap.Num() > 0)
+	{
+
+		TPair<float, TPair<FVector2d, FVector2d>> MinEdge = MinHeap[0];
+		MinHeap.RemoveAt(0);
+        
+		FVector2d From = MinEdge.Value.Key;
+		FVector2d To = MinEdge.Value.Value;
+		
+		if (Visited.Contains(To))
+		{
+			continue;
+		}
+		
+		NodesToReturn.Add(TPair<FVector2d, FVector2d>(From, To));
+		
+		Visited.Add(To);
+		
+		AddEdgesToHeap(To, PrimList, MinHeap, Visited);
+	}
+
+	return NodesToReturn;
+}
+
+void UProceduralWorldGenerator::AddEdgesToHeap(const FVector2d& Point, const TMap<FVector2d, TArray<FVector2d>>& Graph, TArray<TPair<float, TPair<FVector2d, FVector2d>>>& MinHeap, const TSet<FVector2d>& Visited)
+{
+	const TArray<FVector2d>* AdjacentPoints = Graph.Find(Point);
+	if (AdjacentPoints)
+	{
+		for (const FVector2d& Neighbor : *AdjacentPoints)
+		{
+			if (!Visited.Contains(Neighbor))
+			{
+				float Weight = GetDistance(Point, Neighbor);
+				MinHeap.Add(TPair<float, TPair<FVector2d, FVector2d>>(Weight, TPair<FVector2d, FVector2d>(Point, Neighbor)));
+			}
+		}
+	}
+
+	// Trier le heap par poids croissant
+	MinHeap.Sort([](const TPair<float, TPair<FVector2d, FVector2d>>& A, const TPair<float, TPair<FVector2d, FVector2d>>& B)
+	{
+		return A.Key < B.Key;  // Comparer par poids (distance)
+	});
+}
+
+float UProceduralWorldGenerator::GetDistance(const FVector2d& Point1, const FVector2d& Point2)
+{
+	return FVector2d::Distance(Point1, Point2);
+}
 
 
 #if WITH_EDITOR
