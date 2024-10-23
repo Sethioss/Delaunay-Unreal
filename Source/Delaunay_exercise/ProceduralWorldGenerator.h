@@ -5,11 +5,23 @@
 #include "CoreMinimal.h"
 #include "Components/SceneComponent.h"
 #include "IndexTypes.h"
-#include "Polygon2.h"
 #include "ProceduralWorldGenerator.generated.h"
+
+USTRUCT()
+struct FMSTNode
+{
+	GENERATED_BODY()
+
+	FVector2d BeginPoint;
+	FVector2d EndPoint;
+
+	FMSTNode();
+	FMSTNode(const FVector2d& A, const FVector2d& B);
+};
 
 using namespace UE::Math;
 using namespace UE::Geometry;
+using PrimReadyList = TMap<FVector2d, TArray<FVector2d>>;
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class DELAUNAY_EXERCISE_API UProceduralWorldGenerator : public USceneComponent
@@ -64,6 +76,10 @@ protected:
 	void VisualizePoints(TArray<FVector2d>& PointsList) const;
 	void VisualizeDelaunay(TArray<FIndex3i>& Tris) const;
 	void VisualizeVoronoi(TArray<TArray<FVector2d>>& Cells) const;
+
+	PrimReadyList MakePrimNodes(const TArray<TArray<FVector2d>>& VoronoiPoints) const;
+
+	
 
 #if WITH_EDITOR
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;

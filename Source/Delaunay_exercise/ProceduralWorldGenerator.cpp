@@ -3,8 +3,17 @@
 #include "CompGeom/Delaunay2.h"
 #include "Kismet/GameplayStatics.h"
 #include "DebugSphereActor.h"
-#include "Voronoi/Voronoi.h"
 #include "Components/StaticMeshComponent.h"
+
+FMSTNode::FMSTNode()
+{
+}
+
+FMSTNode::FMSTNode(const FVector2d& A, const FVector2d& B)
+{
+	BeginPoint = A;
+	EndPoint = B;
+}
 
 // Sets default values for this component's properties
 UProceduralWorldGenerator::UProceduralWorldGenerator()
@@ -96,6 +105,8 @@ void UProceduralWorldGenerator::LoadGeneration()
 		}
 
 		UE_LOG(LogTemp, Log, TEXT("Voronoi computation completed"));
+
+		PrimReadyList Nodes = MakePrimNodes(VoronoiEdges);
 	}
 	else
 	{
@@ -163,6 +174,29 @@ void UProceduralWorldGenerator::VisualizeVoronoi(TArray<TArray<FVector2d>>& Cell
 	UE_LOG(LogTemp, Warning, TEXT("Voronoi algorithm created %i cells"), Cells.Num());
 
 }
+
+PrimReadyList UProceduralWorldGenerator::MakePrimNodes(const TArray<TArray<FVector2d>>& VoronoiPoints) const
+{
+	PrimReadyList PrimMap;
+	
+	for(int i = 0; i < VoronoiPoints.Num(); i++)
+	{
+		for(int j = 0; j < VoronoiPoints[i].Num(); j++)
+		{
+			int ActualIncrementedValue = (j+1)%VoronoiPoints[i].Num();
+			
+			if(!PrimMap.Contains(VoronoiPoints[i][j]))
+			{
+				PrimMap.Add(VoronoiPoints[i][j]);
+			}
+			PrimMap[VoronoiPoints[i][j]].Add(VoronoiPoints[i][ActualIncrementedValue]);
+		}
+	}
+
+	return PrimMap;
+}
+
+
 
 #if WITH_EDITOR
 void UProceduralWorldGenerator::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
