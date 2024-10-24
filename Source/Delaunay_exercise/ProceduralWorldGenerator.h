@@ -83,12 +83,14 @@ protected:
 	void VisualizePrim(TArray<MSTNode>& Nodes) const;
 
 	PrimReadyList MakePrimNodes(const TArray<TArray<FVector2d>>& VoronoiPoints) const;
-    TArray<MSTNode> PrimAlgorithm(const PrimReadyList& PrimList);
+    MST PrimAlgorithm(const PrimReadyList& PrimList);
+	void SiftUp(TArray<TPair<float, TPair<FVector2d, FVector2d>>>& Heap, int32 Index);
+	void SiftDown(TArray<TPair<float, TPair<FVector2d, FVector2d>>>& Heap, int32 Index);
 	void AddEdgesToHeap(const FVector2d& Point, const TMap<FVector2d, TArray<FVector2d>>& Graph, TArray<TPair<float, TPair<FVector2d, FVector2d>>>& MinHeap, const TSet<FVector2d>& Visited);
 
 	float GetDistance(const FVector2d& Point1, const FVector2d& Point2);
 
-	void GenerateLevel(MST& MST);
+	void GenerateLevel(MST& Mst);
 	
 	void GeneratePathFromMST(const TArray<MSTNode>& Edges, UWorld* World);
 

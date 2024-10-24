@@ -156,9 +156,9 @@ void UProceduralWorldGenerator::VisualizeDelaunay(TArray<FIndex3i>& Tris) const
 		FVector VertexA = FVector(Points[Tris[i].A].X, Points[Tris[i].A].Y, 0.0f);
 		FVector VertexB = FVector(Points[Tris[i].B].X, Points[Tris[i].B].Y, 0.0f);
 		FVector VertexC = FVector(Points[Tris[i].C].X, Points[Tris[i].C].Y, 0.0f);
-		DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + VertexA, GetOwner()->GetActorLocation() + VertexB, FColor::Blue, true, -1.0f, (uint8)0U, 5.0f);
-		DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + VertexB, GetOwner()->GetActorLocation() + VertexC, FColor::Blue, true, -1.0f, (uint8)0U, 5.0f);
-		DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + VertexC, GetOwner()->GetActorLocation() + VertexA, FColor::Blue, true, -1.0f, (uint8)0U, 5.0f);
+		DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + VertexA, GetOwner()->GetActorLocation() + VertexB, FColor::Blue, true, -1.0f, (uint8)0U, 15.0f);
+		DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + VertexB, GetOwner()->GetActorLocation() + VertexC, FColor::Blue, true, -1.0f, (uint8)0U, 15.0f);
+		DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + VertexC, GetOwner()->GetActorLocation() + VertexA, FColor::Blue, true, -1.0f, (uint8)0U, 15.0f);
 	}
 	
 	UE_LOG(LogTemp, Warning, TEXT("Delaunay algorithm has created a polygon with %i triangles"), Tris.Num());
@@ -174,7 +174,7 @@ void UProceduralWorldGenerator::VisualizeVoronoi(TArray<TArray<FVector2d>>& Cell
 			int IncrementIndexToShow = (j+1)%Cells[i].Num();
 			FVector3d PointB(Cells[i][IncrementIndexToShow].X, Cells[i][IncrementIndexToShow].Y, 0.0f);
 
-			DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + PointA, GetOwner()->GetActorLocation() + PointB, FColor::Purple, true, -1.0f, (uint8)0U, 10.0f);
+			DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + PointA, GetOwner()->GetActorLocation() + PointB, FColor::Purple, true, -1.0f, (uint8)0U, 15.0f);
 		}
 	}
 
@@ -189,7 +189,7 @@ void UProceduralWorldGenerator::VisualizePrim(TArray<MSTNode>& Nodes) const
 		FVector3d PointA(Nodes[i].Key.X, Nodes[i].Key.Y, 0.0f);
 		FVector3d PointB(Nodes[i].Value.X, Nodes[i].Value.Y, 0.0f);
 		
-		DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + PointA, GetOwner()->GetActorLocation() + PointB, FColor::Black, true, -1.0f, 0U, 10.0f);
+		DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation() + PointA, GetOwner()->GetActorLocation() + PointB, FColor::Black, true, -1.0f, 0U, 25.0f);
 	}
 }
 
@@ -251,6 +251,40 @@ TArray<MSTNode> UProceduralWorldGenerator::PrimAlgorithm(const PrimReadyList& Pr
 	return NodesToReturn;
 }
 
+void UProceduralWorldGenerator::SiftUp(TArray<TPair<float, TPair<FVector2d, FVector2d>>>& Heap, int32 Index)
+{
+	while (Index > 0)
+	{
+		int32 ParentIndex = (Index - 1) / 2;
+		if (Heap[ParentIndex].Key <= Heap[Index].Key)
+			break;
+		
+		Swap(Heap[ParentIndex], Heap[Index]);
+		Index = ParentIndex;
+	}
+}
+void UProceduralWorldGenerator::SiftDown(TArray<TPair<float, TPair<FVector2d, FVector2d>>>& Heap, int32 Index)
+{
+	int32 Size = Heap.Num();
+	while (true)
+	{
+		int32 SmallestIndex = Index;
+		int32 LeftChild = 2 * Index + 1;
+		int32 RightChild = 2 * Index + 2;
+		
+		if (LeftChild < Size && Heap[LeftChild].Key < Heap[SmallestIndex].Key)
+			SmallestIndex = LeftChild;
+		
+		if (RightChild < Size && Heap[RightChild].Key < Heap[SmallestIndex].Key)
+			SmallestIndex = RightChild;
+		
+		if (SmallestIndex == Index)
+			break;
+		
+		Swap(Heap[Index], Heap[SmallestIndex]);
+		Index = SmallestIndex;
+	}
+}
 void UProceduralWorldGenerator::AddEdgesToHeap(const FVector2d& Point, const TMap<FVector2d, TArray<FVector2d>>& Graph, TArray<TPair<float, TPair<FVector2d, FVector2d>>>& MinHeap, const TSet<FVector2d>& Visited)
 {
 	const TArray<FVector2d>* AdjacentPoints = Graph.Find(Point);
@@ -261,17 +295,20 @@ void UProceduralWorldGenerator::AddEdgesToHeap(const FVector2d& Point, const TMa
 			if (!Visited.Contains(Neighbor))
 			{
 				float Weight = GetDistance(Point, Neighbor);
-				MinHeap.Add(TPair<float, TPair<FVector2d, FVector2d>>(Weight, TPair<FVector2d, FVector2d>(Point, Neighbor)));
+				// Add new element to end of heap
+				int32 NewIndex = MinHeap.Add(
+					TPair<float, TPair<FVector2d, FVector2d>>(
+						Weight, 
+						TPair<FVector2d, FVector2d>(Point, Neighbor)
+					)
+				);
+                
+				// Maintain heap property by sifting up
+				SiftUp(MinHeap, NewIndex);
 			}
 		}
 	}
-	
-	MinHeap.Sort([](const TPair<float, TPair<FVector2d, FVector2d>>& A, const TPair<float, TPair<FVector2d, FVector2d>>& B)
-	{
-		return A.Key < B.Key;
-	});
 }
-
 float UProceduralWorldGenerator::GetDistance(const FVector2d& Point1, const FVector2d& Point2)
 {
 	return FVector2d::Distance(Point1, Point2);
